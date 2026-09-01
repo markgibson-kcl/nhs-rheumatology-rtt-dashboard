@@ -229,11 +229,11 @@ fig = px.choropleth_map(
     hover_name="provider_name_rtt",
 
     hover_data={
-        "provider_code": True,
-        "pct_within_18_weeks": ":.1f",
-        "total_waiting": ":,.0f",
-        "median_wait_weeks": ":.1f",
-        "p92_wait_weeks": ":.1f",
+        "provider_code": False,
+        "pct_within_18_weeks":False,
+        "total_waiting": False,
+        "median_wait_weeks": False,
+        "p92_wait_weeks": False,
     },
 
     map_style="carto-positron",
@@ -313,15 +313,151 @@ fig.update_layout(
 
 
 # ============================================================
-# DISPLAY MAP
+# MAP + TRUST DETAIL PANEL
 # ============================================================
 
-left, centre, right = st.columns(
-    [1.4, 2, 1.4]
+detail_col, map_col = st.columns(
+    [1, 2.2]
 )
 
-with centre:
-    st.plotly_chart(
+with map_col:
+
+    event = st.plotly_chart(
         fig,
-        use_container_width=True
+        use_container_width=True,
+        on_select="rerun",
+        selection_mode="points",
+        key="rtt_map",
     )
+
+
+# ============================================================
+# GET SELECTED TRUST
+# ============================================================
+
+selected_provider_code = None
+
+if (
+    event
+    and event.selection
+    and event.selection.points
+):
+
+    point = event.selection.points[0]
+
+    selected_provider_code = point.get(
+        "location"
+    )
+
+
+# ============================================================
+# TRUST DETAIL PANEL
+# ============================================================
+
+with detail_col:
+
+    st.subheader("Trust details")
+
+    if selected_provider_code is None:
+
+        st.info(
+            "Select a trust on the map to view its "
+            "rheumatology RTT performance."
+        )
+
+    else:
+
+        trust_row = map_data.loc[
+            map_data["provider_code"]
+            == selected_provider_code
+        ]
+
+        if not trust_row.empty:
+
+            trust_row = trust_row.iloc[0]
+
+            if pd.notna(
+                trust_row["provider_name_rtt"]
+            ):
+                trust_name = trust_row[
+                    "provider_name_rtt"
+                ]
+
+            else:
+                trust_name = trust_row[
+                    "provider_name_geo"
+                ]
+
+            st.markdown(
+                f"### {trust_name}"
+            )
+
+            st.caption(
+                f"{selected_month:%B %Y}"
+            )
+
+            # --------------------------------------------
+            # ACTIVE RTT WAITING LIST
+            # --------------------------------------------
+
+            if (
+                pd.notna(
+                    trust_row["total_waiting"]
+                )
+                and trust_row["total_waiting"] > 0
+            ):
+
+                st.metric(
+                    "Within 18 weeks",
+                    (
+                        f"{trust_row['pct_within_18_weeks']:.1f}%"
+                    )
+                )
+
+                st.metric(
+                    "Waiting list",
+                    (
+                        f"{trust_row['total_waiting']:,.0f}"
+                    )
+                )
+
+                st.metric(
+                    "Median wait",
+                    (
+                        f"{trust_row['median_wait_weeks']:.1f} weeks"
+                    )
+                )
+
+                st.metric(
+                    "92nd percentile wait",
+                    (
+                        f"{trust_row['p92_wait_weeks']:.1f} weeks"
+                    )
+                )
+
+            # --------------------------------------------
+            # ZERO RTT PATHWAYS
+            # --------------------------------------------
+
+            elif (
+                pd.notna(
+                    trust_row["total_waiting"]
+                )
+                and trust_row["total_waiting"] == 0
+            ):
+
+                st.info(
+                    "No incomplete rheumatology RTT "
+                    "pathways reported for this month."
+                )
+
+            # --------------------------------------------
+            # NO RTT DATA
+            # --------------------------------------------
+
+            else:
+
+                st.warning(
+                    "Rheumatology RTT data unavailable "
+                    "for this month."
+                )
